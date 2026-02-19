@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quest Core | Strategic Review</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&family=Outfit:wght@300;600;900&display=swap" rel="stylesheet">
+
+    <style>
+        :root { --neon: #00f3ff; --glass: rgba(255, 255, 255, 0.03); --border: rgba(255, 255, 255, 0.1); }
+        body { 
+            background: url('https://images.unsplash.com/photo-1614850523296-d8c1af93d400?q=80&w=2070&auto=format&fit=crop') center/cover no-repeat fixed; 
+            color: white; font-family: 'Outfit', sans-serif; overflow: hidden; height: 100vh; user-select: none; 
+        }
+        body::before { content: ""; position: fixed; inset: 0; background: rgba(0,0,0,0.96); backdrop-filter: blur(25px); z-index: -1; }
+
+        @keyframes containerFloat {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-15px) rotate(0.5deg); }
+        }
+        
+        .zenith-card { 
+            background: var(--glass); 
+            backdrop-filter: blur(30px); 
+            border: 1px solid var(--border); 
+            border-radius: 32px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .animated-stage {
+            animation: containerFloat 6s ease-in-out infinite;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes qExit { from { opacity: 1; transform: scale(1); filter: blur(0); } to { opacity: 0; transform: scale(0.95); filter: blur(10px); } }
+        @keyframes qEnter { 
+            0% { opacity: 0; transform: scale(1.05); filter: blur(20px) brightness(2); } 
+            100% { opacity: 1; transform: scale(1); filter: blur(0) brightness(1); } 
+        }
+        .q-exit { animation: qExit 0.3s ease-in forwards !important; }
+        .q-enter { animation: qEnter 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+        @keyframes answerReveal {
+            0% { opacity: 0; filter: blur(15px); transform: translateY(10px) scale(0.98); }
+            100% { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); }
+        }
+        .a-reveal-active { animation: answerReveal 1.2s cubic-bezier(0.19, 1, 0.22, 1) forwards; }
+
+        @keyframes floatXP {
+            0% { opacity: 0; transform: translateY(0) scale(0.5); }
+            20% { opacity: 1; transform: translateY(-30px) scale(1.5); }
+            100% { opacity: 0; transform: translateY(-150px) scale(1.2); }
+        }
+        .xp-float { position: fixed; font-weight: 900; color: var(--neon); pointer-events: none; animation: floatXP 1.5s ease-out forwards; z-index: 9999; font-family: 'Orbitron'; text-shadow: 0 0 20px rgba(0,243,255,0.8); font-size: 4rem; }
+        .xp-deduct { color: #ff4d4d; text-shadow: 0 0 20px rgba(255, 77, 77, 0.8); }
+        
+        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+
+        .revealed-glow { border-color: var(--neon) !important; box-shadow: 0 0 60px rgba(0, 243, 255, 0.15), inset 0 0 20px rgba(0, 243, 255, 0.05); }
+        .screen-hidden { display: none !important; }
+        .scroller::-webkit-scrollbar { width: 4px; }
+        .scroller::-webkit-scrollbar-thumb { background: var(--neon); border-radius: 10px; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <main id="view-start" class="h-full flex flex-col items-center justify-center">
+        <div class="zenith-card p-10 w-full max-w-xl text-center">
+            <h1 class="text-6xl font-black italic font-['Orbitron'] mb-8 uppercase tracking-tighter">QUEST<span class="text-cyan-400">CORE</span></h1>
+            <textarea id="in-roster" placeholder="Paste Learner Names (One per line)..." 
+                class="w-full bg-white/5 border border-white/10 rounded-2xl p-5 h-40 outline-none focus:border-cyan-400 text-white mb-6"></textarea>
+            <button onclick="launchSequence()" onmouseover="playHover()" class="w-full bg-cyan-500 py-5 rounded-full text-black font-black hover:bg-white transition-all shadow-lg shadow-cyan-500/20 uppercase tracking-widest">
+                Initialize Session
+            </button>
+        </div>
+    </main>
+
+    <main id="view-arena" class="screen-hidden h-full flex flex-col max-w-6xl mx-auto">
+        <header class="flex justify-between items-center mb-8">
+            <div class="font-['Orbitron'] flex items-center gap-4">
+                <span id="q-counter" class="text-xs font-black tracking-widest text-white/50 uppercase">Question# 01/46</span>
+            </div>
+            
+            <nav class="flex bg-white/5 p-1 rounded-full border border-white/10">
+                <button onclick="changeTab('review')" onmouseover="playHover()" id="tab-review" class="px-10 py-2 rounded-full text-[10px] font-black transition-all uppercase">Mission</button>
+                <button onclick="changeTab('leaderboard')" onmouseover="playHover()" id="tab-lb" class="px-10 py-2 rounded-full text-[10px] font-black transition-all uppercase">Rankings</button>
+            </nav>
+
+            <button onclick="exportResults()" onmouseover="playHover()" class="text-[10px] font-black text-cyan-400 border border-cyan-400/20 px-4 py-1 rounded hover:bg-cyan-400 hover:text-black transition-all uppercase">Export Archive</button>
+        </header>
+
+        <div id="content-review" class="flex-1 flex flex-col gap-6 relative">
+            <div id="q-stage" class="q-enter flex-1 flex flex-col animated-stage">
+                <div class="zenith-card p-12 flex-1 flex flex-col justify-center items-center relative text-center">
+                    
+                    <div class="absolute top-10 flex flex-col items-center gap-2">
+                        <span class="text-xs font-bold text-cyan-400 uppercase tracking-[0.8em] opacity-60">EARN POINTS</span>
+                        <div class="flex items-center gap-3 bg-white/5 px-6 py-3 rounded-full border border-white/10">
+                             <span class="text-sm font-bold text-white/40 uppercase tracking-widest">Points:</span>
+                             <input id="pts-custom" type="number" value="10" onmouseover="playHover()" 
+                                class="bg-transparent border-none w-24 text-center text-4xl font-black text-cyan-400 outline-none">
+                        </div>
+                    </div>
+
+                    <h2 id="q-text" class="text-3xl md:text-5xl font-black italic text-white leading-tight max-w-4xl"></h2>
+                    
+                    <div id="reveal-btn" onclick="revealAnswer()" onmouseover="playHover()" class="mt-16 w-full max-w-md py-8 border-2 border-dashed border-white/10 rounded-3xl cursor-pointer hover:bg-white/5 hover:border-cyan-400/50 transition-all text-center">
+                        <span class="font-['Orbitron'] text-[10px] tracking-[0.4em] opacity-30 uppercase">Reveal Answer</span>
+                    </div>
+
+                    <div id="a-stage" class="hidden mt-10 p-12 w-full max-w-4xl zenith-card border-cyan-400/50 bg-cyan-400/5 text-center revealed-glow">
+                        <h3 id="a-text" class="text-2xl md:text-3xl font-bold text-white leading-relaxed mb-8"></h3>
+                        
+                        <div class="flex gap-4 justify-center">
+                            <button id="win-btn" onclick="openSelector()" onmouseover="playHover()" class="opacity-0 bg-cyan-500 text-black px-12 py-4 rounded-full font-black text-xs tracking-[0.3em] uppercase hover:bg-white transition-all transform active:scale-95 shadow-xl shadow-cyan-500/20">
+                                Select Learner
+                            </button>
+                            <button id="next-btn" onclick="nextQuestion()" onmouseover="playHover()" class="hidden bg-white text-black px-12 py-4 rounded-full font-black text-xs tracking-[0.3em] uppercase transition-all shadow-xl">
+                                Next Transmission
+                            </button>
+                        </div>
+                    </div>
+
+                    <button id="back-btn" onclick="prevQuestion()" onmouseover="playHover()" class="hidden absolute bottom-6 opacity-20 hover:opacity-100 transition-all">
+                        <span class="font-['Orbitron'] text-[9px] tracking-[0.3em] uppercase border-b border-white/20 pb-1">Previous Entry</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="content-lb" class="screen-hidden flex-1 overflow-y-auto scroller px-4">
+            <div class="max-w-2xl mx-auto space-y-4 pb-20" id="lb-list"></div>
+        </div>
+    </main>
+
+    <div id="select-overlay" class="fixed inset-0 bg-black/95 backdrop-blur-2xl z-[5000] hidden flex flex-col items-center justify-center p-6">
+        <div class="w-full max-w-5xl flex flex-col items-center">
+            <h2 class="font-['Orbitron'] text-cyan-400 text-3xl font-black mb-2 tracking-[0.4em]">ASSIGN pts</h2>
+            <p class="text-xs text-white/40 uppercase mb-12 tracking-widest font-semibold">Awarding points to the correct unit</p>
+            <div id="learner-selector" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 w-full overflow-y-auto p-4 scroller max-h-[65vh]"></div>
+            <button onclick="closeSelector()" onmouseover="playHover()" class="mt-12 text-white/20 hover:text-white text-[10px] font-black tracking-widest uppercase transition-all">Go Back</button>
+        </div>
+    </div>
+
+    <div id="manual-modal" class="fixed inset-0 bg-black/80 backdrop-blur-xl z-[6000] hidden flex items-center justify-center p-6" onclick="closeManualModal()">
+        <div class="zenith-card p-10 w-full max-w-sm border-white/20 text-center" onclick="event.stopPropagation()">
+            <h3 id="manual-title" class="font-['Orbitron'] text-xs font-black tracking-[0.3em] text-cyan-400 mb-2 uppercase">Adjusting Core</h3>
+            <p id="manual-subtitle" class="text-[10px] text-white/40 uppercase tracking-widest mb-8">Target: Learner Name</p>
+            
+            <input id="manual-input" type="number" placeholder="00" 
+                class="w-full bg-white/5 border border-white/10 rounded-2xl p-6 text-center text-5xl font-black text-white outline-none focus:border-cyan-400 mb-6 font-['Orbitron']">
+            
+            <div class="flex gap-4">
+                <button onclick="confirmManualAdjust()" class="flex-1 bg-cyan-500 py-4 rounded-xl text-black font-black text-xs uppercase tracking-widest hover:bg-white transition-all">Confirm</button>
+                <button onclick="closeManualModal()" class="flex-1 border border-white/10 py-4 rounded-xl text-white/40 font-black text-xs uppercase tracking-widest hover:bg-white/5 transition-all">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSfx(freq, type, dur, vol = 0.1) {
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            g.gain.setValueAtTime(vol, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + dur);
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + dur);
+        }
+        const playHover = () => playSfx(200, 'sine', 0.05, 0.03);
+        const playClick = () => playSfx(600, 'sine', 0.1, 0.1);
+        const playAward = () => { playSfx(800, 'sine', 0.1); setTimeout(() => playSfx(1200, 'sine', 0.2), 50); };
+        const playDeduct = () => { playSfx(400, 'sine', 0.1); setTimeout(() => playSfx(200, 'sine', 0.2), 50); };
+        const playReveal = () => playSfx(440, 'triangle', 0.3, 0.05);
+
+        const quizData = [
+            { q: "Where do we report a credit card without fraud?", a: "HAL" },
+            { q: "What window or tab do we go to for transferring calls?", a: "Interaction Details" },
+            { q: "What tool do we use to process an account closure and reward redemption?", a: "Edge Sales and Service Platform" },
+            { q: "This is a type of APR that will be assessed for ATM Withdrawals.", a: "Cash Advance APR" },
+            { q: "What is the number of days that a customer may have for their billing cycle?", a: "28 to 31 days" },
+            { q: "What do you call the days between a statement end date and due date that allows the customer to prepare their billing payment?", a: "Grace period" },
+            { q: "What tool do we use to authenticate a client?", a: "Edge Sales and Service Platform." },
+            { q: "What type of verification do we use if we have to obtain two (2) correct information from the client.", a: "Knowledge-based Questions" },
+            { q: "What is this added layer of security on top of OTP/KBQ/Innovis  that must be obtained from the clients verbally?", a: "Account level password / Verbal password" },
+            { q: "When do we say the recorded line disclosure?", a: "<ul class='text-left inline-block'><li>• if the phone is passed over to another person</li><li>• if the customer put you on speaker</li><li>• if you hear background noises</li><li>• if the customer is driving</li></ul>" },
+            { q: "Do we report a credit card as lost or stolen if the card was captured at an ATM?", a: "No" },
+            { q: "How long does it take for Rush card to be delivered to the customer if the order was placed prior the cut off time for rush card delivery?", a: "Overnight / within 24 hours. If after the cut off time, the usual time frame would be 1-3 business days. Note: The cut off time for Rush Card Order is 3:00 PM EST." },
+            { q: "What tool do we use for replacing damage credit card?", a: "Edge Sales and Service Platform/Service console" },
+            { q: "Whenever we assist customers in enrolling for an online banking, the system sends a unique PIN number. This PIN number is also referred to as?", a: "Real-Time PIN" },
+            { q: "When a customer gets locked out of online banking, what service or options do we provide to get it unlocked?", a: "Provide self-service option such as walking the customer through the online banking to reset their password." },
+            { q: "What type of status does a credit card have if the declined reason of a transaction is \"Consumer Control\"", a: "The Customer has their PNC Easy lock enabled." },
+            { q: "What would be the next step after performing Transaction verification if the customer already left the store and is unable to re-do the transaction?", a: "Provide CLP phone number." },
+            { q: "What is CLP's phone number? (Please refer to transaction verification article)", a: "855-866-6950" },
+            { q: "These information must be readily available for customers whenever they would like to set up their cash advance PIN with an automated system", a: "<ul class='text-left inline-block'><li>• DOB</li><li>• 16 Digit card#</li><li>• CVV</li><li>• Full Social Security number</li></ul>" },
+            { q: "What is the phone number that the customer must dial to set up their Cash Advance PIN? (Please refer to setting up cash advance article)", a: "855-893-0460" },
+            { q: "How long does it take for a customer to be able to request for another credit limit increase after recently submitting one or the account was just recently opened?", a: "6 months" },
+            { q: "How long does it take for branch payments to post? ", a: "5 days" },
+            { q: "How long does it take for branch payments to take effect?", a: "Same day the payment was processed" },
+            { q: "If the payment was processed via MAPP (CCC) how would the customer receive the confirmation?", a: "Email" },
+            { q: "What is the cut off time for payments made in PNC online banking via transfer funds tab?", a: "Please refer to Payment methods and time frame article" },
+            { q: "If a payment was processed via MAPP (CCC) what is the cut off time.", a: "4:15 PM EST" },
+            { q: "If a payment was processed via MAPP (CCC) what is the payment posting date and effective date if the payment was processed before the cut off time?", a: "payment will be posted that night and effective the same day the payment was processed." },
+            { q: "Provide the rules that must be met before being able to submit the due date change request.", a: "<ul class='text-left inline-block'><li>• Account must not be in delinquent status</li><li>• Request must not be submitted if the customer have not made a FIRST time payment yet.</li><li>• Request can only be submitted annually.</li></ul>" },
+            { q: "Can we process a payment reversal if the customer mistakenly made a payment twice?", a: "Yes" },
+            { q: "Can we still process a payment reversal even if the credit card will be left in a delinquent status after the request?", a: "No" },
+            { q: "Whenever we process an account closure for Credit card that earns rewards / points, we have to inform the customer about the unredeemed rewards and inform them that if the reward balance is below the minimum redemption amount, the rewards will be forfeited. If above the minimum redemption amount, offer to redeem the reward before closing it. TRUE or FALSE?", a: "TRUE" },
+            { q: "What is the type of Fee or Finance Charge that is GENERALLY refundable?", a: "Late payment fee." },
+            { q: "Can we refund or remove cash advance fee?", a: "No" },
+            { q: "Can we refund or remove Foreign transaction fee?", a: "No" },
+            { q: "Can we refund or remove Balance transfer fee?", a: "No" },
+            { q: "Can we refund or remove a late fee if the late fee is in pending transactions/authorizations tab in HAL?", a: "No" },
+            { q: "This is a type of credit card that earns a percentage of cash back or reward depending on the type of purchase.", a: "PNC Cash Rewards." },
+            { q: "If a customer redeemed their rewards for cash back or to be applied to their principal balance, and the redemption amount did not exceed their exact principal balance, should the customer still make a payment to avoid late fee?", a: "Yes" },
+            { q: "Whenever we process a reward redemption and is to be transferred to one of their checking or savings account, what is the rule that must be met in order for us to process the request aside from the Checking or Savings account must be connected with their credit card.", a: "The Checking or savings account must be under the same name of both the PCH and SCH if the credit card is a Joint account." },
+            { q: "If a customer wishes to redeem their PNC Points for flight ticket, can we assist the customer? if Not, which department do we transfer them to?", a: "Rewards Specialist / Travel Specialist" },
+            { q: "In order for you to transfer the customer to Rewards/Travel Specialist, what is this piece of information that you must have before contacting the said department?", a: "Rewards ID" },
+            { q: "How long does a travel notice last?", a: "30 days. (Why?)" },
+            { q: "How long does it take for electronic or virtual gift card to be received after submitting the request through online banking by the customer?", a: "6 hours." },
+            { q: "Given that Cash Unlimited offers cash back of 2% for every purchases made, it is also given that every cash back earned will also be tracked and converted into points per cash back earned. What is the equivalent of 1 point to dollar amount?", a: "$0.01" },
+            { q: "Can we process a balance transfer from one PNC Credit card to another PNC Credit Card?", a: "No" },
+            { q: "Given that the term \"balance\" from the process Balance transfer could both mean the amount owed or the available balance for the customer to use. Explain how a balance transfer work.", a: "A balance transfer is paying off a balance from a NON-PNC credit card or loan, by transferring the balance to their PNC Credit Card." }
+        ];
+
+        let learners = {};
+        let currentIdx = 0;
+        let maxReachedIdx = 0;
+        let currentManualTarget = { name: '', isDeduct: false, x: 0, y: 0 };
+
+        function launchSequence() {
+            playClick();
+            const raw = document.getElementById('in-roster').value;
+            const names = raw.split('\n').map(n => n.trim()).filter(n => n !== "");
+            if (!names.length) return alert("Roster required.");
+            names.forEach(n => learners[n] = 0);
+            document.getElementById('view-start').classList.add('screen-hidden');
+            document.getElementById('view-arena').classList.remove('screen-hidden');
+            changeTab('review');
+            loadQuestion();
+        }
+
+        function loadQuestion() {
+            const stage = document.getElementById('q-stage');
+            stage.classList.remove('q-enter');
+            void stage.offsetWidth;
+            stage.classList.add('q-enter');
+
+            const item = quizData[currentIdx];
+            document.getElementById('q-counter').innerText = `Question# ${String(currentIdx + 1).padStart(2, '0')}/46`;
+            document.getElementById('q-text').innerText = item.q;
+            document.getElementById('a-text').innerHTML = item.a;
+            
+            document.getElementById('back-btn').classList.toggle('hidden', currentIdx === 0);
+
+            if(currentIdx < maxReachedIdx) {
+                document.getElementById('reveal-btn').classList.add('hidden');
+                document.getElementById('a-stage').classList.remove('hidden');
+                document.getElementById('a-stage').classList.add('a-reveal-active');
+                document.getElementById('win-btn').classList.add('hidden');
+                document.getElementById('next-btn').classList.remove('hidden');
+            } else {
+                document.getElementById('reveal-btn').classList.remove('hidden');
+                document.getElementById('a-stage').classList.add('hidden');
+                document.getElementById('a-stage').classList.remove('a-reveal-active');
+                document.getElementById('win-btn').classList.remove('hidden');
+                document.getElementById('win-btn').style.opacity = "0";
+                document.getElementById('next-btn').classList.add('hidden');
+            }
+        }
+
+        function prevQuestion() {
+            if (currentIdx > 0) {
+                currentIdx--;
+                loadQuestion();
+            }
+        }
+
+        function nextQuestion() {
+            if (currentIdx < quizData.length - 1) {
+                currentIdx++;
+                loadQuestion();
+            }
+        }
+
+        function revealAnswer() {
+            playReveal();
+            document.getElementById('reveal-btn').classList.add('hidden');
+            const aStage = document.getElementById('a-stage');
+            aStage.classList.remove('hidden');
+            aStage.classList.add('a-reveal-active');
+            setTimeout(() => {
+                document.getElementById('win-btn').style.transition = "opacity 0.8s ease";
+                document.getElementById('win-btn').style.opacity = "1";
+            }, 600);
+        }
+
+        function openSelector() {
+            playClick();
+            const overlay = document.getElementById('select-overlay');
+            const grid = document.getElementById('learner-selector');
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+            grid.innerHTML = Object.keys(learners).sort().map(name => `
+                <div onclick="awardPoints(event, '${name}')" onmouseover="playHover()" class="zenith-card p-6 text-center cursor-pointer hover:border-cyan-400 hover:bg-cyan-400/10 transition-all">
+                    <div class="text-[12px] font-black uppercase tracking-widest text-white">${name}</div>
+                    <div class="text-[10px] text-cyan-400 mt-2 font-bold">${learners[name]} pts</div>
+                </div>
+            `).join('');
+        }
+
+        function awardPoints(event, name) {
+            const points = parseInt(document.getElementById('pts-custom').value) || 0;
+            learners[name] += points;
+            playAward();
+            
+            showFloatingText(event.clientX, event.clientY, `+${points}`, false);
+            confetti({ particleCount: 70, spread: 80, origin: { x: event.clientX/window.innerWidth, y: event.clientY/window.innerHeight }, colors: ['#00f3ff', '#ffffff'] });
+            
+            closeSelector();
+            setTimeout(() => {
+                if (currentIdx < quizData.length - 1) {
+                    currentIdx++;
+                    maxReachedIdx = Math.max(maxReachedIdx, currentIdx);
+                    const stage = document.getElementById('q-stage');
+                    stage.classList.add('q-exit');
+                    setTimeout(() => {
+                        stage.classList.remove('q-exit');
+                        loadQuestion();
+                    }, 300);
+                } else { changeTab('leaderboard'); }
+            }, 800);
+        }
+
+        function openManualAdjust(event, name, isDeduct) {
+            playClick();
+            currentManualTarget = { name, isDeduct, x: event.clientX, y: event.clientY };
+            
+            const modal = document.getElementById('manual-modal');
+            const title = document.getElementById('manual-title');
+            const sub = document.getElementById('manual-subtitle');
+            const input = document.getElementById('manual-input');
+
+            title.innerText = isDeduct ? "Reducing Core" : "Boosting Core";
+            title.style.color = isDeduct ? "#ff4d4d" : "#00f3ff";
+            sub.innerText = `Target: ${name}`;
+            input.value = "";
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            
+            setTimeout(() => input.focus(), 50);
+        }
+
+        function confirmManualAdjust() {
+            const input = document.getElementById('manual-input');
+            const points = parseInt(input.value);
+            
+            if (!isNaN(points) && points !== 0) {
+                const finalAmt = currentManualTarget.isDeduct ? -Math.abs(points) : Math.abs(points);
+                learners[currentManualTarget.name] += finalAmt;
+                
+                if (currentManualTarget.isDeduct) playDeduct(); else playAward();
+                showFloatingText(currentManualTarget.x, currentManualTarget.y, (currentManualTarget.isDeduct ? "-" : "+") + Math.abs(points), currentManualTarget.isDeduct);
+                renderLeaderboard();
+            }
+            closeManualModal();
+        }
+
+        function closeManualModal() {
+            const modal = document.getElementById('manual-modal');
+            modal.classList.remove('flex');
+            modal.classList.add('hidden');
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeManualModal();
+                closeSelector();
+            }
+        });
+
+        document.getElementById('manual-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') confirmManualAdjust();
+        });
+
+        function showFloatingText(x, y, text, isDeduct) {
+            const div = document.createElement('div');
+            div.className = `xp-float ${isDeduct ? 'xp-deduct' : ''}`;
+            div.innerText = text;
+            div.style.left = `${x - 50}px`;
+            div.style.top = `${y - 50}px`;
+            document.body.appendChild(div);
+            setTimeout(() => div.remove(), 1500);
+        }
+
+        function closeSelector() {
+            document.getElementById('select-overlay').classList.add('hidden');
+            document.getElementById('select-overlay').classList.remove('flex');
+        }
+
+        function changeTab(t) {
+            playClick();
+            document.getElementById('content-review').classList.add('screen-hidden');
+            document.getElementById('content-lb').classList.add('screen-hidden');
+            document.getElementById('tab-review').classList.remove('bg-cyan-500', 'text-black');
+            document.getElementById('tab-lb').classList.remove('bg-cyan-500', 'text-black');
+            if (t === 'review') {
+                document.getElementById('content-review').classList.remove('screen-hidden');
+                document.getElementById('tab-review').classList.add('bg-cyan-500', 'text-black');
+            } else {
+                renderLeaderboard();
+                document.getElementById('content-lb').classList.remove('screen-hidden');
+                document.getElementById('tab-lb').classList.add('bg-cyan-500', 'text-black');
+            }
+        }
+
+        function renderLeaderboard() {
+            const list = document.getElementById('lb-list');
+            const sorted = Object.entries(learners).sort((a,b) => b[1] - a[1]);
+            list.innerHTML = sorted.map(([name, score], i) => `
+                <div class="zenith-card p-6 flex justify-between items-center ${i === 0 ? 'border-cyan-400 border-2 shadow-[0_0_30px_rgba(0,243,255,0.2)]' : ''}">
+                    <div class="flex items-center gap-6">
+                        <span class="font-['Orbitron'] text-xl font-black ${i < 3 ? 'text-cyan-400' : 'opacity-20'}">#${i+1}</span>
+                        <span class="font-black uppercase tracking-widest text-sm">${name}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="openManualAdjust(event, '${name}', true)" class="w-8 h-8 rounded-full border border-red-500/30 flex items-center justify-center text-red-500 hover:bg-red-500 hover:text-white transition-all font-bold">-</button>
+                        <button onclick="openManualAdjust(event, '${name}', false)" class="w-8 h-8 rounded-full border border-cyan-400/30 flex items-center justify-center text-cyan-400 hover:bg-cyan-400 hover:text-black transition-all font-bold">+</button>
+                        <span class="text-2xl font-black text-white ml-2">${score} <span class="text-[10px] text-cyan-400 uppercase">pts</span></span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function exportResults() {
+            playClick();
+            let out = "QUEST CORE RECAP\n" + "=".repeat(20) + "\n\n";
+            Object.entries(learners).sort((a,b) => b[1]-a[1]).forEach(([n,s]) => {
+                out += `${n.padEnd(20)} : ${s} XP\n`;
+            });
+            const blob = new Blob([out], {type: 'text/plain'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `QuestResults.txt`;
+            a.click();
+        }
+    </script>
+</body>
+</html>
